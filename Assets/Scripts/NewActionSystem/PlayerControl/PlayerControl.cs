@@ -34,25 +34,6 @@ public class PlayerControl : MonoBehaviour
     
     
     
-    
-    
-    public StateMachine FSM;
-
-    public InstructionTest instruction;
-
-    public BehaviourBase behaviour;
-
-    [SerializeField]public List<RequestBase> m_configRequests;//请求配置
-    //private Animator anim;
-    
-    //地面检测
-    public LayerMask groundLayer; // 地面层
-    public Vector2 boxSize = new Vector2(0.5f, 0.1f); // 射线盒的大小
-    public float rayLength = 0.2f; // 射线长度
-    public Vector2 originOffset = Vector2.zero; // 起点的偏移量
-    public bool useAbsoluteOrigin = false; // 是否使用绝对起点
-    public Vector2 absoluteOrigin; // 绝对起点
-    
     private void Awake()
     {
         if (Instance == null)
