@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c16c4fe174ae3ae489ba01c727570b30, type: 3}
+  m_Name: PlayerState_Move
+  m_EditorClassIdentifier: 
+  switchNodes:
+  - {fileID: 11400000, guid: aab4c0a155717244f8ef0a620bd4a87e, type: 2}
+  - {fileID: 11400000, guid: 0fb665583f50cc64ba1e9b0add9de2ff, type: 2}
+  configAtomActions:
+  - {fileID: 11400000, guid: 5173901918e19ab4d824bbad44f6497c, type: 2}
