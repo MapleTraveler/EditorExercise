@@ -29,9 +29,10 @@ public class StateHandlerBase : IStateHandler
         m_stateData = new List<PlayerStateBase>();
         m_stateConitions = new Dictionary<int, Func<bool>>();
         //读取配置
-        StateConfiguration();
-        StateConditionConfiguration();
+        // StateConfiguration();
+        // StateConditionConfiguration();
         Init();
+        Debug.Log("动画机初始化成功");
     }
     
 

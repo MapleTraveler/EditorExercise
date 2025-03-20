@@ -2,15 +2,12 @@
 
 public class RequestHandlerTest : RequestHandlerBase
 {
-    public RequestHandlerTest(BehaviourBase behaviour) : base(behaviour)
-    {
-    }
-
+    
     public override void ReceiveRequest(RequestBase request)
     {
         if (!m_foreRequestsQueue.Contains(request) && !m_backRequestsQueue.Contains(request))
         {
-            //Debug.Log("把请求添加到前端队列");
+            Debug.Log("把请求添加到前端队列");
             EnqueueFore(request);
         }
     }

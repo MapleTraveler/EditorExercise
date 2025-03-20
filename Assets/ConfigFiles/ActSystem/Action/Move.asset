@@ -9,15 +9,15 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 01ff9abc911f4e98b8be4da3ba671c7a, type: 3}
-  m_Name: New Action Test
+  m_Script: {fileID: 11500000, guid: 295a9f2567f84364189476b4e5463ab8, type: 3}
+  m_Name: Move
   m_EditorClassIdentifier: 
   animName: 
-  totalFrame: 0
   <priorityIndex>k__BackingField: 0
   canBeInterrupted: 0
   canInterruptCurrentAnim: 0
   executeConditions: []
-  actionMethods:
-  - activeFrame: 0
-    continueFrameCount: 0
+  logicActionMethods: []
+  physicActionMethods:
+  - <ActiveFrame>k__BackingField: 1
+    actionEvent: {fileID: 11400000, guid: 3c59f534cba63db49b0fc51931be2c68, type: 2}

@@ -1,16 +1,17 @@
 ﻿using System.Collections.Generic;
+using UnityEngine;
 
 public abstract class RequestHandlerBase
 {
     protected Queue<RequestBase> m_foreRequestsQueue;
     protected Queue<RequestBase> m_backRequestsQueue;
-    protected BehaviourBase m_behaviour;
+    
 
-    public RequestHandlerBase(BehaviourBase behaviour)
+    public RequestHandlerBase()
     {
-        m_behaviour = behaviour;
         m_foreRequestsQueue = new Queue<RequestBase>();
         m_backRequestsQueue = new Queue<RequestBase>();
+        Debug.Log("请求处理层初始化完成");
     }
     
     public abstract void ReceiveRequest(RequestBase request);

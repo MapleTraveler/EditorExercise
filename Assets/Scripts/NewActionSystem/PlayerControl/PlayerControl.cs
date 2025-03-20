@@ -28,7 +28,11 @@ public class PlayerControl : MonoBehaviour
 
     // player
     private float _speed;
-    
+    private float _animationBlend;
+    private float _targetRotation = 0.0f;
+    private float _rotationVelocity;
+    private float _verticalVelocity;
+    private float _terminalVelocity = 53.0f;
 
     #endregion
     
@@ -85,7 +89,11 @@ public class PlayerControl : MonoBehaviour
 
     public void Jump()
     {
-        
+        // 下落速度逻辑？
+        if (_verticalVelocity < 0.0f)
+        {
+            _verticalVelocity = -2f;
+        }
     }
     
     

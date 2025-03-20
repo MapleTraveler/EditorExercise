@@ -8,8 +8,9 @@ public class RequestNode : RequestBase
     {
         Debug.Log("请求执行行为"+actionType);
         // TODO 行为层判断还没准备好
-        return m_behaviour.TrySwitchAction(actionType);
+        return m_behaviour.TrySwitchActionWithData(actionType,data);
     }
+    
 
     protected override bool OnRequestOver()
     {

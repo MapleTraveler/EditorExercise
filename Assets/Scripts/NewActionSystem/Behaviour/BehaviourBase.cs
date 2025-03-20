@@ -20,6 +20,7 @@ public class BehaviourBase
         this.stateHandler = stateHandler;
         this.actionMapConfig = actionMapConfig;
         InitActionMap();
+        Debug.Log("行为层初始化完成");
 
     }
 

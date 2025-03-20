@@ -18,7 +18,7 @@ public abstract class RequestBase : ScriptableObject
 {
     [SerializeField] public ActionType actionType;//可配置的下一个状态切换请求
     [SerializeField] protected int m_requestLifeSteps = 1;//生命周期
-    [SerializeField] public int priorityIndex { get; } = 1; // 越小则越优先，同级则后来者可以替代先来者
+    [field:SerializeField] public int priorityIndex { get; private set; } = 1; // 越小则越优先，同级则后来者可以替代先来者
     
     
     protected int m_requestCount;//当前周期
@@ -50,7 +50,7 @@ public abstract class RequestBase : ScriptableObject
         return OnRequestOver();
     }
 
-    public virtual void ExternalInit(params object[] data)
+    public virtual void ExternalInit(object data)
     {
         this.data = data;
     }

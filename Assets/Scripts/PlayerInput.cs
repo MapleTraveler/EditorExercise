@@ -45,14 +45,18 @@ public class PlayerInput
     
     private bool item1Input;
     private bool item2Input;
-    
-    
-    
-    public void Init()
+
+
+    public PlayerInput()
+    {
+        Init();
+        Debug.Log("玩家输入处理初始化成功");
+    }
+    private void Init()
     {
         inputActions ??= new PlayerInputActions();
-        
-        
+
+        RegisterInputCallbacks();
         inputActions.Enable();
     }
 
