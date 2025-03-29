@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dc6b15966d929f34ba890783e748d473, type: 3}
+  m_Name: PackageTable
+  m_EditorClassIdentifier: 
+  DataList:
+  - id: 1
+    type: 1
+    star: 1
+    name: "\u5BD2\u51B0\u5251"
+    description: "\u53EF\u4EE5\u628A\u654C\u4EBA\u51BB\u8D77\u6765"
+    skillDescription: "\u91CA\u653E\u5251\u6C14\u51B0\u51BB\u654C\u4EBA"
+    imagePath: "Image/UI/Weapon/\u6B66\u5668_01"
+  - id: 1
+    type: 1
+    star: 2
+    name: "\u86C7\u77DB"
+    description: "\u53EF\u4EE5\u4F7F\u654C\u4EBA\u4E2D\u6BD2"
+    skillDescription: "\u6BD2\u6BD2\u6BD2\u6BD2\u6BD2\u6BD2"
+    imagePath: "Image/UI/Weapon/\u6B66\u5668_02"
+  - id: 3
+    type: 1
+    star: 2
+    name: "\u7D2B\u5149\u5DE8\u5251"
+    description: "\u7B28\u91CD\uFF0C\u4F46\u662F\u4F24\u5BB3\u5DE8\u5927"
+    skillDescription: "EX\u5496\u55B1\u68D2\uFF01\uFF01"
+    imagePath: "Image/UI/Weapon/\u6B66\u5668_03"
+  - id: 4
+    type: 1
+    star: 3
+    name: "\u7C89\u957F\u77DB"
+    description: "\u5236\u5F0F\u523A\u51FB\u7528\u957F\u77DB"
+    skillDescription: "\u51B2\u523A\uFF01\u51B2\uFF01"
+    imagePath: "Image/UI/Weapon/\u6B66\u5668_04"
+  - id: 5
+    type: 1
+    star: 4
+    name: "\u5149\u4E4B\u5251"
+    description: "\u8574\u542B\u5149\u4E4B\u80FD\u91CF\u7684\u5927\u5251"
+    skillDescription: "Light\uFF01\uFF01"
+    imagePath: "Image/UI/Weapon/\u6B66\u5668_05"

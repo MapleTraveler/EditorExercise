@@ -45,8 +45,10 @@ public class PlayerInput
     
     private bool item1Input;
     private bool item2Input;
+    
+    // 输入状态
 
-
+    private bool isMoving;
     public PlayerInput()
     {
         Init();
@@ -58,6 +60,19 @@ public class PlayerInput
 
         RegisterInputCallbacks();
         inputActions.Enable();
+        isMoving = false;
+    }
+
+    public void Update()
+    {
+        
+    }
+    public void FixedUpdate()
+    {
+        if (isMoving)
+        {
+            OnCommandIssue?.Invoke(CallType.Move, new InputData { movementInput = playerMovementInput });
+        }
     }
 
     private void RegisterInputCallbacks()
@@ -65,12 +80,14 @@ public class PlayerInput
         inputActions.GamePlay.Move.performed += i =>
         {
             playerMovementInput = i.ReadValue<Vector2>();
-            OnCommandIssue?.Invoke(CallType.Move, new InputData { movementInput = playerMovementInput });
+            //OnCommandIssue?.Invoke(CallType.Move, new InputData { movementInput = playerMovementInput });
+            isMoving = true;
         };
         inputActions.GamePlay.Move.canceled += i =>
         {
             playerMovementInput = Vector2.zero;
             OnCommandIssue?.Invoke(CallType.Move, new InputData { movementInput = Vector2.zero });
+            isMoving = false;
         };
 
         

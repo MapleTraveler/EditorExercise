@@ -2,62 +2,35 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-
-public class PlayerControl : MonoBehaviour
+[RequireComponent(typeof(Rigidbody2D))]
+public class TestMove : MonoBehaviour
 {
+    // 暴露与原始代码完全相同的参数
+    [SerializeField] float moveSpeed = 5f; 
+    [SerializeField] float speedChangeRate = 10f;
     
-    public static PlayerControl Instance;
-    
+    private Rigidbody2D rb2d;
+    private float _speed; // 保持与原始代码相同的私有变量
 
-
-    #region 角色组件
-
-    public Rigidbody2D rb2d;
-
-    #endregion
-
-    #region 配置属性字段
-    
-    public float moveSpeed = 5f;
-    [Tooltip("Acceleration and deceleration")]
-    public float speedChangeRate = 10.0f;
-
-    #endregion
-
-    #region 内置属性
-
-    // player
-    private float _speed;
-    private float _verticalVelocity;
-    
-    private float _elapsedTime = 0f;
-    private float _startSpeed = 0f;
-    private float _accelDuration = 0.5f; // 加速时间，可调整
-    private bool _isAccelerating = false;
-
-    #endregion
-    
-    
-    
-    private void Awake()
+    void Awake()
     {
-        if (Instance == null)
-        {
-            Instance = this;
-        }
-        
+        rb2d = GetComponent<Rigidbody2D>();
     }
 
-    private void Update()
+    void Update()
     {
         
     }
 
     private void FixedUpdate()
     {
-        
+        // 旧输入系统获取输入（严格模拟原框架输入）
+        float horizontal = Input.GetAxisRaw("Horizontal");
+        Vector2 input = new Vector2(horizontal, 0);
+
+        // 直接调用原始Move方法
+        Move(input);
     }
-    
 
     public void Move(Vector2 movement)
     {
@@ -89,16 +62,4 @@ public class PlayerControl : MonoBehaviour
         }
         
     }
-
-    public void Jump()
-    {
-        // 下落速度逻辑？
-        if (_verticalVelocity < 0.0f)
-        {
-            _verticalVelocity = -2f;
-        }
-    }
-    
-    
-    
 }

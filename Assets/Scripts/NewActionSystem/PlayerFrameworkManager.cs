@@ -36,12 +36,14 @@ public class PlayerFrameworkManager : MonoBehaviour
 
     private void Update()
     {
+        _playerInput.Update();
         _requestHandler.Update();
         _behaviour.Update();
     }
 
     private void FixedUpdate()
     {
+        _playerInput.FixedUpdate();
         _requestHandler.FixedUpdate();
         _behaviour.FixedUpdate();
     }
