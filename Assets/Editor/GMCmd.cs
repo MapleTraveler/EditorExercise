@@ -40,4 +40,11 @@ public class GMCmd
             Debug.Log(item);
         }
     }
+
+    [MenuItem("GMCmd/打开背包主界面")]
+    public static void OpenPackagePanel()
+    {
+        UIMgr.Instance.OpenPanel(UIConst.PackagePanel);
+    }
+    
 }
