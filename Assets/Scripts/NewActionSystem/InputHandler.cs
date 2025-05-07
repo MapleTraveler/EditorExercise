@@ -30,6 +30,14 @@ public class InputHandler
             }
         }
         
+    }
+
+    public void SendInputToRequestLevel()
+    {
+        
+    }
+    public void SendInputToRequestLevel<TData>(TData data)
+    {
         
     }
 }

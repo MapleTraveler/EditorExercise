@@ -109,4 +109,6 @@ public class UIMgr
 public class UIConst
 {
     public const string PackagePanel = "PackagePanel";
+    public const string LotteryPanel = "LotteryPanel";
+    public const string MainPanel = "MainPanel";
 }
