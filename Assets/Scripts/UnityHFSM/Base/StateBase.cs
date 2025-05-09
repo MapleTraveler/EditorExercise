@@ -47,6 +47,14 @@ namespace UnityHFSM
         {
 
         }
+
+        /// <summary>
+        /// 当该状态为活动状态时，由状态机的逻辑函数每帧调用的函数。
+        /// </summary>
+        public virtual void OnLogic()
+        {
+            
+        }
     
         /// <summary>
         /// 当状态机从此状态过渡到另一状态（退出此状态）时调用。
