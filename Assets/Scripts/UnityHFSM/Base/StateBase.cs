@@ -72,7 +72,7 @@ namespace UnityHFSM
         ///		如果此状态当前还不能退出（例如还在播放动画），
         ///		则应稍后（如在 <c>OnLogic()</c> 中）再调用 <c>fsm.StateCanExit()</c> 通知状态机。
         /// </summary>
-        public virtual void OnExitRequest()//TODO: 暂时不管，观察之后的用法
+        public virtual void OnExitRequest()
         {
 
         }

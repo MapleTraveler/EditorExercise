@@ -11,7 +11,7 @@
     /// 子状态不需要知道父状态机完整的泛型参数类型列表。
     /// 否则，在每一层使用不同泛型类型的分层状态机将无法实现。
     /// </remarks>
-    public interface IStateTimingManager//TODO:暂时抛弃泛型remark中的内容供之后扩展泛型查看
+    public interface IStateTimingManager
     {
         /// <summary>
         /// 通知状态机当前激活的状态可以安全退出。如果当前存在待执行的转换请求，状态机会立即执行该转换。

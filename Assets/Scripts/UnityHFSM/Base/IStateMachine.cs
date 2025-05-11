@@ -10,8 +10,8 @@
     public interface IStateMachine<TStateId> : IStateTimingManager
     {
         /// <summary>
-        /// 正在等待的（延迟）转换目标状态。如果当前没有挂起的转换，或者
-        /// 正在等待的是一个退出转换（exit transition），则返回 null。
+        /// 正在等待的（延迟）转换目标状态。
+        /// 如果当前没有挂起的转换，或者正在等待的是一个退出转换（exit transition），则返回 null。
         /// </summary>
         StateBase<TStateId> PendingState { get; }
         

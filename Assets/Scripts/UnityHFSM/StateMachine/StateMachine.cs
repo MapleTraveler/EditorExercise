@@ -73,6 +73,7 @@ namespace UnityHFSM
             // 需要额外的字段 isPending 来标记是否已设置待定转换。
             public bool isPending;
             
+            // 标识此次转换是否退出当前子状态机
             public bool isExitTransition;
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -160,23 +161,251 @@ namespace UnityHFSM
         public TStateId PendingStateName => pendingTransition.targetState;
         public StateBase<TStateId> PendingState => GetState(PendingStateName);
         public bool HasPendingTransition => pendingTransition.isPending;
-        public IStateTimingManager ParentFsm => fsm;
+        public IStateTimingManager ParentFsm => fsm;// ParentFsm是对fsm字段的属性（四舍五入是个Get方法）封装
         
         public bool IsRootFsm => fsm == null;
         
-        public StateMachine(bool needsExitTime, bool isGhostState = false) : base(needsExitTime, isGhostState)
+        
+        /// <summary>
+        /// 初始化一个新的 StateMachine 实例。
+        /// </summary>
+        /// <param name="needsExitTime">
+        /// （仅适用于分层状态）
+        /// 表示当此状态机作为另一个状态机的子状态时，是否可以立即退出（false），
+        /// 还是需要等到显式的退出转换（true）。
+        /// </param>
+        /// <param name="isGhostState">
+        /// 如果为 true，则该状态将变为“幽灵状态”，即状态机不会停留在此状态
+        /// 一旦进入该状态，会立即尝试所有可能的出边转换，而不是等到下一次 OnLogic 调用。
+        /// </param>
+        /// <param name="rememberLastState">
+        /// （仅适用于分层状态）
+        /// 如果为 true，当重新进入此状态机时，会返回上一次的活跃状态，
+        /// 而不是返回初始启动状态（startState）。
+        /// </param>
+        /// <inheritdoc cref="StateBase{TStateId}(bool,bool)"/>
+        public StateMachine(bool needsExitTime, bool isGhostState = false,bool rememberLastState = false) 
+            : base(needsExitTime: needsExitTime, isGhostState : isGhostState)
         {
+            this.rememberLastState = rememberLastState;
+        }
+        
+        /// <summary>
+        /// 如果状态机尚未初始化，则抛出异常。
+        /// </summary>
+        /// <param name="context">
+        /// 操作上下文描述，用于提示当前执行哪个操作时发现状态机尚未初始化。
+        /// </param>
+        private void EnsureIsInitializedFor(string context)
+        {
+            if (activeState == null)
+            {
+                throw UnityHFSM.Exceptions.Common.NonInitialized(this, context);
+            }
+        }
+        
+        
+        /// <summary>
+        /// 通知状态机“当前活跃状态”可以安全退出。如果当前存在待处理的转换（pending transition），
+        /// 状态机将立即执行这次转换。
+        /// </summary>
+        /// <remarks>
+        /// 此信号仅在当前时刻有效，不能用于表示“之后”也可以转换 ——
+        /// 它不会被缓存或记住。<br/>
+        /// 它只在存在 pending transition 且状态机在 <c>OnEnter</c> 执行之后检查转换时才生效。<br/>
+        /// 所以如果在 <c>OnEnter</c> 中调用本方法，将不会产生任何效果。
+        /// </remarks>
+        public void StateCanExit()
+        {
+            if(!pendingTransition.isPending)
+                return;
+            ITransitionListener listener = pendingTransition.listener;
+            if (pendingTransition.isExitTransition)
+            {
+                pendingTransition = default;
+                listener?.BeforeTransition();
+                PerformVerticalTransition();
+                listener?.AfterTransition();
+            }
+            else
+            {
+                TStateId state =  pendingTransition.targetState;
+                
+                // 当待切换的目标状态是一个幽灵状态（ghost state）时，
+                // ChangeState() 会立即尝试该状态的所有出边转移（outgoing transitions），
+                // 这可能会在过程中修改 pendingTransition。
+                // 因此，我们需要先将 pendingTransition 清空（default），而不是在调用 ChangeState() 之后清空，
+                // 否则新的、有效的 pendingTransition 可能会被错误地覆盖掉。
+                pendingTransition = default;
+                ChangeState(state,listener);// 这句内部可能再次设置 pendingTransition！
+            }
+        }
+        
+
+        /// <summary>
+        /// 立即切换到目标状态。
+        /// </summary>
+        /// <param name="targetState">目标状态的名称 / 标识符。</param>
+        /// <param name="listener">可选：状态切换前后触发回调的监听器。</param>
+        private void ChangeState(TStateId targetState, ITransitionListener listener = null)
+        {
+            listener?.BeforeTransition();
+            activeState?.OnExit();
+            
+            StateBundle bundle;
+            if (!stateBundlesByName.TryGetValue(targetState, out bundle) || bundle == null)
+            {
+                //TODO:打状态未找到报错   
+                throw UnityHFSM.Exceptions.Common.StateNotFound(this, name.ToString(), context: "Switching states");
+            }
+            
+            activeTransitions = bundle.transitions ?? noTransitions;
+            activeTriggerTransitions = bundle.triggerToTransitions ?? noTriggerTransitions;
+            
+            activeState = bundle.state;//此处状态字段切换完成
+            activeState.OnEnter();
+            // 处理该状态的全部 Transitions 和 TriggerTransitions 的 OnEnter 事件
+            for (int i = 0, count = activeTransitions.Count;i < count; i++)
+            {
+                activeTransitions[i].OnEnter();
+            }
+
+            foreach (List<TransitionBase<TStateId>> transitions in activeTriggerTransitions.Values)
+            {
+                for (int i = 0, count = transitions.Count;i < count; i++)
+                {
+                    transitions[i].OnEnter();
+                }
+            }
+            
+            listener?.AfterTransition();
+            
+            // 状态切换的回调函数
+            OnStateChanged?.Invoke(activeState);
+
+            if (activeState.isGhostState)
+            {
+                TryAllDirectTransitions();
+            }
+        }
+        
+        /// <summary>
+        /// 向父状态机发出信号，表明当前状态机已准备好退出，
+        /// 从而允许父状态机进行状态转换。
+        /// </summary>
+        private void PerformVerticalTransition()// 状态机发起的状态转换请求，状态发生的退出请求为 OnExitRequest() 退出状态而非状态机
+        {
+            fsm?.StateCanExit();
+        }
+        
+        
+        /// <summary>
+        /// 请求状态切换，且会考虑当前状态的 <c>needsExitTime</c> 属性。
+        /// </summary>
+        /// <param name="targetState">目标状态的名称或标识符。</param>
+        /// <param name="forceInstantly">
+        /// 如果为 true，将忽略当前状态的 <c>needsExitTime</c> 要求，强制立即切换状态。
+        /// </param>
+        /// <param name="listener">可选：切换前后触发回调的监听器对象。</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void RequestStateChange(
+            TStateId targetState,
+            bool forceInstantly = false,
+            ITransitionListener listener = null)
+        {
+            if (!activeState.needsExitTime || forceInstantly)
+            {
+                pendingTransition = default;
+                ChangeState(targetState,listener);
+            }
+            else
+            {
+                pendingTransition.SetToState(targetState, listener);
+                activeState.OnExitRequest();
+                // 如果当前状态可以退出，它将调用：
+                // -> state.fsm.StateCanExit()，接着会调用：
+                // -> fsm.ChangeState(...)
+
+            }
         }
 
+        
+        /// <summary>
+        /// 请求一次“垂直跳转”，允许当前状态机退出，从而使其父状态机能够进行状态切换。
+        /// 该方法会遵循当前状态的 <c>needsExitTime</c> 属性（即是否需要等待状态退出）。
+        /// </summary>
+        /// <param name="forceInstantly">
+        /// 如果为 true，将忽略 <c>needsExitTime</c>，强制立即退出当前状态。
+        /// </param>
+        /// <param name="listener">可选：状态切换前后调用的回调监听器。</param>
+        public void RequestExit(bool forceInstantly = false, ITransitionListener listener = null)
+        {
+            if (!activeState.needsExitTime || forceInstantly)
+            {
+                pendingTransition.Clear();
+                listener?.BeforeTransition();
+                PerformVerticalTransition();
+                listener?.AfterTransition();
+            }
+            else
+            {
+                pendingTransition.SetToExit(listener);
+                activeState.OnExitRequest();
+            }
+        }
+
+        
+        
+        private bool TryTransition(TransitionBase<TStateId> transition)
+        {
+            if (transition.isExitTransition)
+            {
+                /*
+                你现在要离职（退出状态），
+                → 得确保你老板（fsm）还在（fsm != null），
+                → 而且他真的准备安排新人接替（HasPendingTransition），
+                → 并且你符合离职条件（ShouldTransition）；
+                否则你不能走。
+                */
+                if (fsm == null || !fsm.HasPendingTransition || !transition.ShouldTransition())
+                {
+                    return false;
+                }
+                RequestExit(transition.forceInstantly,transition as ITransitionListener);
+            }
+            else
+            {
+                if (!transition.ShouldTransition())
+                    return false;
+                RequestStateChange(transition.to,transition.forceInstantly,transition as ITransitionListener);
+            }
+
+            return true;
+        }
+        
+        
+        
+        /// <summary>
+        /// 尝试执行“普通”状态转换（即从当前状态出发的直接转换）。
+        /// </summary>
+        /// <returns>如果发生了状态转换，返回 true；否则返回 false。</returns>
+        private bool TryAllDirectTransitions()
+        {
+            for (int i = 0, count = activeTransitions.Count; i < count; i++)
+            {
+                TransitionBase<TStateId> transition = activeTransitions[i];
+                if (TryTransition(transition))
+                    return true;
+            }
+
+            return false;
+        }
         public void Trigger(TEventNameType eventName)
         {
             throw new NotImplementedException();
         }
 
-        public void StateCanExit()
-        {
-            throw new NotImplementedException();
-        }
+        
         
         
         public StateBase<TStateId> GetState(TStateId name)
@@ -194,19 +423,7 @@ namespace UnityHFSM
             throw new NotImplementedException();
         }
 
-        /// <summary>
-        /// 如果状态机尚未初始化，则抛出异常。
-        /// </summary>
-        /// <param name="context">
-        /// 操作上下文描述，用于提示当前执行哪个操作时发现状态机尚未初始化。
-        /// </param>
-        private void EnsureIsInitializedFor(string context)
-        {
-            if (activeState == null)
-            {
-                throw UnityHFSM.Exceptions.Common.NonInitialized(this, context);
-            }
-        }
+        
         
         
         
