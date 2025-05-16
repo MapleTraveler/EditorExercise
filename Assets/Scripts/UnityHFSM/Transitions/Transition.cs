@@ -54,4 +54,24 @@ namespace UnityHFSM
             afterTransition?.Invoke(this);
         }
     }
+    /// <inheritdoc />
+    public class Transition : Transition<string>
+    {
+        /// <inheritdoc />
+        public Transition(
+            string @from,
+            string to,
+            Func<Transition<string>, bool> condition = null,
+            Action<Transition<string>> beforeTransition = null,
+            Action<Transition<string>> afterTransition = null,
+            bool forceInstantly = false) : base(
+            @from,
+            to,
+            condition,
+            beforeTransition: beforeTransition,
+            afterTransition: afterTransition,
+            forceInstantly: forceInstantly)
+        {
+        }
+    }
 }

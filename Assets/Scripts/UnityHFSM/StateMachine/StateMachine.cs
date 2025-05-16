@@ -126,7 +126,7 @@ namespace UnityHFSM
         // 当前待执行的状态转移
         private PendingTransition pendingTransition = default;
         
-        // TODO:是否在重新进入状态机时回到上次离开时的状态，而不是 startState?/未来支持状态回滚？
+        // 是否在重新进入状态机时回到上次离开时的状态，而不是 startState
         private bool rememberLastState = false;
         
         
@@ -142,8 +142,8 @@ namespace UnityHFSM
         
         private readonly List<TransitionBase<TStateId>> transitionsFromAny
             = new List<TransitionBase<TStateId>>();
-        private readonly List<TransitionBase<TStateId>> triggerTransitionsFromAny
-            = new List<TransitionBase<TStateId>>();
+        private readonly Dictionary<TEventNameType,List<TransitionBase<TStateId>>> triggerTransitionsFromAny
+            = new ();
 
         public StateBase<TStateId> ActiveState
         {
@@ -400,30 +400,467 @@ namespace UnityHFSM
 
             return false;
         }
+        /// <summary>
+        /// 尝试所有“全局”状态转移（即可以从任意状态触发的转移）。
+        /// </summary>
+        /// <returns>如果发生了转移，返回 true；否则返回 false。</returns>
+        private bool TryAllTriggerTransitions()
+        {
+            for (int i = 0,count = transitionsFromAny.Count; i < count; i++)
+            {
+                TransitionBase<TStateId> transition = transitionsFromAny[i];
+                
+                // 如果目标状态已经是当前激活状态，则不执行状态转换。
+                if(EqualityComparer<TStateId>.Default.Equals(transition.to, activeState.name))
+                    continue;
+                if(TryTransition(transition))
+                    return true;
+            }
+            return false;
+            
+        }
+
+        /// <summary>
+        /// 如果这是根状态机，则调用 <c>OnEnter</c> 方法，从而初始化状态机。
+        /// </summary>
+        public override void Init()
+        {
+            if(!IsRootFsm) return;
+            
+            OnEnter();
+        }
+
+        public override void OnEnter()
+        {
+            if (!startState.hasState)
+            {
+                throw UnityHFSM.Exceptions.Common.MissingStarState(this, context: "运行状态机的 OnEnter 时");
+            }
+            // 清除上一次运行中可能遗留下的待定转换
+            pendingTransition.Clear();
+            
+            ChangeState(startState.state);
+
+            // 调用“从任意状态出发”的通用转换的 OnEnter 方法
+            for (int i = 0, count = transitionsFromAny.Count; i < count; i++)
+            {
+                transitionsFromAny[i].OnEnter();
+            }
+            // 调用“从任意状态出发”的触发器转换的 OnEnter 方法
+            foreach (List<TransitionBase<TStateId>> transitions in triggerTransitionsFromAny.Values)
+            {
+                for (int i = 0, count = transitions.Count; i < count; i++)
+                {
+                    transitions[i].OnEnter();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 执行一帧逻辑更新：
+        /// - 尝试执行一次状态转换（最多一次）（优先触发器转换，其次是直接转换）。
+        /// - 若状态转换发生，则在转换之后执行当前状态的 OnLogic() 方法。
+        /// - 若未发生转换，则直接执行当前状态的 OnLogic()。
+        /// </summary>
+        public override void OnLogic()
+        {
+            EnsureIsInitializedFor("Running OnLogic");
+
+            if (TryAllTriggerTransitions())
+                goto runOnLogic;
+            if (TryAllDirectTransitions())
+                goto runOnLogic;
+            
+            runOnLogic:
+            activeState?.OnLogic();
+        }
+        
+        /// <summary>
+        /// 当状态机被退出时调用。执行当前活动状态的 OnExit，并重置活动状态。
+        /// </summary>
+        public override void OnExit()
+        {
+            if (activeState == null)
+                return;
+            // 如果启用了“记住上次状态”的选项
+            if (rememberLastState)
+            {
+                // 将当前活动状态保存为下一次进入状态机时的起始状态
+                startState = (activeState.name, true);
+            }
+            
+            activeState.OnExit();
+            // 通过将 activeState 置为 null，可以防止在状态机再次进入并切换到起始状态时，
+            // 当前状态的 OnExit 方法被重复调用。
+            // 否则再次进入状态机时，会在 OnEnter 中调用 ChangeState(startState)，又再次触发该状态的 OnExit()，逻辑出错。
+            activeState = null;
+        }
+
+        public override void OnExitRequest()
+        {
+            if(activeState.needsExitTime)
+                activeState.OnExitRequest();
+        }
+
+        /// <summary>
+        /// 定义状态机的起始状态（首次进入状态机时将进入该状态）。
+        /// </summary>
+        /// <param name="stateName">起始状态的名称或标识符。</param>
+        public void SetStartState(TStateId stateName)
+        {
+            startState = (stateName,false);
+        }
+
+        
+        /// <summary>
+        /// 获取与指定 <c>stateName</c> 状态标识符对应的 StateBundle（状态包）
+        /// 如果已存在该状态的 StateBundle，则直接返回；
+        /// 如果尚不存在，则会新建一个 StateBundle，并将其添加到 Dictionary 中，
+        /// 然后返回新建的实例。
+        /// </summary>
+        private StateBundle GetOrCreateStateBundle(TStateId stateName)
+        {
+            StateBundle stateBundle;
+
+            if (!stateBundlesByName.TryGetValue(stateName, out stateBundle))
+            {
+                stateBundle = new StateBundle();
+                stateBundlesByName.Add(stateName, stateBundle);
+            }
+            return stateBundle;
+        }
+
+        /// <summary>
+        /// 向状态机中添加一个新的节点 / 状态。
+        /// </summary>
+        /// <param name="stateName">新状态的名称 / 标识符。</param>
+        /// <param name="state">新的状态实例，
+        ///     例如 <see cref="State"/>、<see cref="CoState"/>、或<see cref="StateMachine"/>。</param>
+        public void AddState(TStateId stateName, StateBase<TStateId> state)
+        {
+            state.fsm = this;
+            state.name = stateName;
+            state.Init();
+            
+            StateBundle stateBundle = GetOrCreateStateBundle(stateName);
+            stateBundle.state = state;
+
+            if (stateBundlesByName.Count == 1 && !startState.hasState)
+            {
+                SetStartState(stateName);
+            }
+        }
+
+        /// <summary>
+        /// 初始化一个状态转换（Transition）：
+        /// - 设置该转换所属的状态机（fsm）
+        /// - 调用转换的初始化方法（Init）
+        /// </summary>
+        /// <param name="transition">需要初始化的状态转换对象。</param>
+        private void InitTransition(TransitionBase<TStateId> transition)
+        {
+            transition.fsm = this;
+            transition.Init();
+        }
+        
+        /// <summary>
+        /// 添加一个状态之间的普通状态转换（Transition）。
+        /// </summary>
+        /// <param name="transition"></param>
+        private void AddTransition(TransitionBase<TStateId> transition)
+        {
+            InitTransition(transition);
+            StateBundle stateBundle = GetOrCreateStateBundle(transition.from);
+            stateBundle.AddTransition(transition);
+        }
+        
+        
+        /// <summary>
+        /// 添加一个“全局转移”
+        /// 该转换可以从任意状态触发，无需指定具体的起始状态（from）。
+        /// </summary>
+        /// <param name="transition">
+        /// 转换实例；其中的 from 字段可以留空（无实际意义）。
+        ///</param>
+        public void AddTransitionFromAny(TransitionBase<TStateId> transition)
+        {
+            InitTransition(transition);
+
+            transitionsFromAny.Add(transition);
+        }
+        
+        /// <summary>
+        /// 添加一个“带触发器的转换”：只有在指定的 trigger 被激活时才会检查该转换是否发生。
+        /// </summary>
+        /// <param name="trigger">触发器的名称或标识符。</param>
+        /// <param name="transition">
+        /// 转换实例，例如 <see cref="Transition"/>、<see cref="TransitionAfter"/> 等。
+        /// </param>
+        public void AddTriggerTransition(TEventNameType trigger, TransitionBase<TStateId> transition)
+        {
+            InitTransition(transition);
+
+            StateBundle bundle = GetOrCreateStateBundle(transition.from);
+            bundle.AddTriggerTransition(trigger, transition);
+        }
+
+
+        /// <summary>
+        /// 添加一个“全局触发器转换”：
+        /// 该转换可以从任何状态出发，但只会在指定的 trigger 被激活时才检查是否可以发生。
+        /// </summary>
+        /// <param name="trigger">触发器的名称或标识符。</param>
+        /// <param name="transition">
+        /// 转换实例；其 from 字段可以留空，因为在此上下文中没有实际意义。
+        /// </param>
+        public void AddTriggerTransitionFromAny(TEventNameType trigger, TransitionBase<TStateId> transition)
+        {
+            InitTransition(transition);
+            
+            List<TransitionBase<TStateId>> transitionsOfTrigger;
+
+            if (!triggerTransitionsFromAny.TryGetValue(trigger, out transitionsOfTrigger))
+            {
+                transitionsOfTrigger = new List<TransitionBase<TStateId>>();
+                triggerTransitionsFromAny.Add(trigger, transitionsOfTrigger);
+            }
+            
+            transitionsOfTrigger.Add(transition);
+        }
+
+
+        /// <summary>
+        /// 添加两个双向转换：
+        /// 如果传入的 transition 的条件为 true，则从 "from" 状态转换到 "to" 状态；
+        /// 否则会执行反向转换，即从 "to" 状态回到 "from" 状态。
+        /// </summary>
+        /// <remarks>
+        /// 内部会使用同一个 transition 实例，并通过包装成 <see cref="ReverseTransition"/> 来实现反向转换。
+        /// 在反向转换过程中，<c>afterTransition</c> 回调会在转换前被调用，
+        /// 而 <c>BeforeTransition</c> 回调会在转换之后调用。
+        /// 如果不希望这种行为，可以通过创建两个独立的 transition 实例来自定义行为。
+        /// </remarks>
+        public void AddTwoWayTransition(TransitionBase<TStateId> transition)
+        {
+            
+            InitTransition(transition);
+            AddTransition(transition);
+
+            ReverseTransition<TStateId> reverse = new ReverseTransition<TStateId>(transition, false);
+            InitTransition(reverse);
+            AddTransition(reverse);
+        }
+        
+        /// <summary>
+        /// 添加两个由同一个触发器激活的转移：
+        /// - 如果传入的转移条件成立，将从 "from" 状态切换到 "to" 状态；
+        /// - 否则，将执行相反方向的切换，即从 "to" 状态切换回 "from"。
+        /// </summary>
+        /// <remarks>
+        /// 内部会使用 <see cref="ReverseTransition"/> 包装传入的转移，从而创建反向版本。
+        /// 注意：反向转移中，<c>afterTransition</c> 回调会在切换前调用，
+        /// 而 <c>BeforeTransition</c> 回调会在切换后调用，这与正向逻辑相反。
+        /// 如果不希望出现此行为，请手动创建两个独立的 Transition 实例替代本方法。
+        /// </remarks>
+        public void AddTwoWayTriggerTransition(TEventNameType trigger, TransitionBase<TStateId> transition)
+        {
+            InitTransition(transition);
+            AddTriggerTransition(trigger, transition);
+
+            ReverseTransition<TStateId> reverse = new ReverseTransition<TStateId>(transition, false);
+            InitTransition(reverse);
+            AddTriggerTransition(trigger, reverse);
+        }
+        
+        /// <summary>
+        /// 添加一个退出转换（Exit Transition），从特定状态发起，
+        /// 表示该状态是状态机的出口，允许当前状态机退出、
+        /// 并让其父状态机继续进行状态转换。
+        /// 只有当父状态机存在待处理的转换（pending transition）时才会检查此转换。
+        /// </summary>
+        /// <param name="transition">
+        /// 转换实例。其中的 "to" 字段在该上下文中无意义，可留空。
+        /// </param>
+        public void AddExitTransition(TransitionBase<TStateId> transition)
+        {
+            transition.isExitTransition = true;
+            AddTransition(transition);
+        }
+        
+        /// <summary>
+        /// 添加一个基于触发器（Trigger）触发的退出转换，
+        /// 从某一特定状态触发，允许当前状态机退出，
+        /// 并让其父状态机继续进行状态切换。
+        /// 仅在指定触发器激活且父状态机存在 pending transition 时生效。
+        /// </summary>
+        /// <param name="trigger">触发器的标识符</param>
+        /// <param name="transition">
+        /// 转换实例。"to" 字段无意义，可忽略。
+        /// </param>
+        public void AddExitTriggerTransition(TEventNameType trigger, TransitionBase<TStateId> transition)
+        {
+            transition.isExitTransition = true;
+            AddTriggerTransition(trigger, transition);
+        }
+        
+        /// <summary>
+        /// 添加一个“从任意状态发起”的退出转换（Exit Transition），
+        /// 用于标记状态机的出口，使其可以退出并让父状态机继续转换。
+        /// 仅当父状态机存在待处理转换时才会检查此转换。
+        /// </summary>
+        /// <param name="transition">
+        /// 转换实例。"from" 和 "to" 字段在该上下文中无意义，可留空。
+        /// </param>
+        public void AddExitTransitionFromAny(TransitionBase<TStateId> transition)
+        {
+            transition.isExitTransition = true;
+            AddTransitionFromAny(transition);
+        }
+
+
+        /// <summary>
+        /// 添加一个从任意状态出发、基于触发器激活的退出转换，
+        /// 当指定触发器激活时允许状态机退出，并让父状态机继续切换状态。
+        /// 该转换只会在父状态机存在待处理转换时生效。
+        /// </summary>
+        /// <param name="trigger">触发器标识符</param>
+        /// <param name="transition">
+        /// 转换实例。"from" 和 "to" 字段无意义，可忽略。
+        /// </param>
+        public void AddExitTriggerTransitionFromAny(TEventNameType trigger, TransitionBase<TStateId> transition)
+        {
+            transition.isExitTransition = true;
+            AddTriggerTransitionFromAny(trigger, transition);
+        }
+        
+        
+
+        /// <summary>
+        /// 激活指定的触发器（trigger），
+        /// 检查所有与该触发器相关的触发器转换（trigger transitions），
+        /// 判断是否应该执行状态转换。
+        /// </summary>
+        /// <param name="eventName">触发器的名称 / 标识符。</param>
+        /// <returns>如果发生了状态转换则返回 true，否则返回 false。</returns>
+        public bool TryTrigger(TEventNameType eventName)
+        {
+            EnsureIsInitializedFor("Checking all trigger transitions of the active state");
+            
+            List<TransitionBase<TStateId>> triggerTransitions;
+
+            if (triggerTransitionsFromAny.TryGetValue(eventName, out triggerTransitions))
+            {
+                for (int i = 0, count = triggerTransitions.Count; i < count; i++)
+                {
+                    TransitionBase<TStateId> transition = triggerTransitions[i];
+                    if(EqualityComparer<TStateId>.Default.Equals(transition.to,activeState.name))
+                        continue;
+                    
+                    if(TryTransition(transition))
+                        return true;
+                }
+            }
+            
+            if(activeTriggerTransitions.TryGetValue(eventName, out triggerTransitions))
+            {
+                for (int i = 0, count = triggerTransitions.Count; i < count; i++)
+                {
+                    TransitionBase<TStateId> transition = triggerTransitions[i];
+
+                    if (TryTransition(transition))
+                        return true;
+                }   
+            }
+            
+            return false;
+        }
+
+        
+        /// <summary>
+        /// 在整个分层状态机中激活指定的触发器（trigger），
+        /// 会从当前状态机开始，依次检查所有活跃状态中相关的触发器转换，
+        /// 以判断是否应当发生状态转换。
+        /// </summary>
+        /// <param name="eventName">触发器的名称或标识符。</param>
         public void Trigger(TEventNameType eventName)
         {
-            throw new NotImplementedException();
+            // 如果当前状态机已经根据该 trigger 执行了一次转换，
+            // 就不再继续向更深层次的子状态机传播此 trigger。
+            if(TryTrigger(eventName)) return;
+            
+            // 如果当前激活状态本身是一个状态机（支持 ITriggerable 接口），则向其继续传递触发器
+            (activeState as ITriggerable<TEventNameType>)?.Trigger(eventName);
         }
 
-        
-        
-        
-        public StateBase<TStateId> GetState(TStateId name)
+        /// <summary>
+        /// 仅在当前状态机内部激活指定的触发器，不会传播给子状态机。
+        /// </summary>
+        /// <param name="eventName">触发器的名称或标识符。</param>
+        public void TryTriggerLocally(TEventNameType eventName)
         {
-            throw new NotImplementedException();
+            TryTrigger(eventName);
         }
+        
+        
+        
 
+        /// <summary>
+        /// 在当前活跃状态上执行一个无参动作。
+        /// </summary>
+        /// <param name="eventName">动作的名称。</param>
         public void OnAction(TEventNameType eventName)
         {
-            throw new NotImplementedException();
+            EnsureIsInitializedFor("运行当前状态的 OnAction 动作");
+            (activeState as IActionable<TEventNameType>)?.OnAction(eventName);
         }
 
+        /// <summary>
+        /// 在当前活跃状态上执行一个带参数的动作。
+        /// </summary>
+        /// <param name="eventName">动作的名称。</param>
+        /// <param name="data">附带的数据参数。</param>
+        /// <typeparam name="TData">
+        /// 数据参数的类型。必须与通过 <c>AddAction&lt;T&gt;(...)</c> 添加动作时的数据类型一致。
+        /// </typeparam>
         public void OnAction<TData>(TEventNameType eventName, TData data)
         {
-            throw new NotImplementedException();
+            EnsureIsInitializedFor("运行当前状态的带参 OnAction 动作");
+            (activeState as IActionable<TEventNameType>)?.OnAction<TData>(eventName, data);
+        }
+        
+        
+
+        public StateBase<TStateId> GetState(TStateId name)
+        {
+            StateBundle stateBundle;
+            if (!stateBundlesByName.TryGetValue(name, out stateBundle) || stateBundle == null)
+            {
+                throw UnityHFSM.Exceptions.Common.StateNotFound(this, name.ToString(), context: "Getting a state");
+            }
+            
+            return stateBundle.state;
         }
 
-        
+        /// <summary>
+        /// 仅适用于使用 string 类型的状态机：
+        /// 返回指定名称的子状态机实例。
+        /// 当你使用字符串作为状态标识符进行分层状态机开发时，这是一种快捷访问方式。
+        /// </summary>
+        public StateMachine<string, string, string> this [TStateId stateName]// 只读的索引器属性
+        {
+            get
+            {
+                StateBase<TStateId> state = GetState(stateName);
+                StateMachine<string, string, string> subFsm = state as StateMachine<string, string, string>;
+
+                if (subFsm == null)
+                {
+                    UnityHFSM.Exceptions.Common.QuickIndexerMisusedForGettingState(this, stateName.ToString());
+                }
+
+                return subFsm;
+            }
+        }
         
         
         

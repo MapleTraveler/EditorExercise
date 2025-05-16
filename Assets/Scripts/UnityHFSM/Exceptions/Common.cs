@@ -32,6 +32,40 @@
             );
         }
 
+        public static StateMachineException MissingStarState<TStateId>(
+            StateBase<TStateId> fsm,
+            string context = null,
+            string problem = null,
+            string solution = null)
+        {
+            return CreateStateMachineException(
+                fsm,
+                context,
+                problem ?? "未选择初始状态。状态机至少需要一个状态才能正常运行。",
+                solution ?? "请确保在调用 Init() 或 OnEnter() 方法前，已通过 fsm.AddState(...) 添加至少一个状态。"
+            );
+
+        }
+        
+        /// <summary>
+        /// 抛出异常：错误地通过索引器获取了一个非状态机的状态。
+        /// </summary>
+        /// <param name="fsm">当前的状态机实例。</param>
+        /// <param name="stateName">尝试获取的状态名称。</param>
+        /// <returns>封装好的状态机异常实例。</returns>
+        public static StateMachineException QuickIndexerMisusedForGettingState<TStateId>(
+            StateBase<TStateId> fsm,
+            string stateName)
+        {
+            return CreateStateMachineException(
+                fsm,
+                context: "使用索引器访问嵌套状态机时出错",
+                problem: "选中的状态并不是一个状态机（StateMachine 类型）。",
+                solution: "索引器（this[...]）仅用于快速访问嵌套状态机。若要访问普通状态，请使用 GetState(\"" + stateName + "\") 方法。"
+            );
+        }
+
+        
         // 封装一层， 通过 StateMachineWalker 定位用
         private static StateMachineException CreateStateMachineException<TStateId>(
             StateBase<TStateId> fsm,
