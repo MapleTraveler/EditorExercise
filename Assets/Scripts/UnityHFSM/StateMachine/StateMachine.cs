@@ -356,7 +356,6 @@ namespace UnityHFSM
         }
 
         
-        
         private bool TryTransition(TransitionBase<TStateId> transition)
         {
             if (transition.isExitTransition)
@@ -385,7 +384,6 @@ namespace UnityHFSM
         }
         
         
-        
         /// <summary>
         /// 尝试执行“普通”状态转换（即从当前状态出发的直接转换）。
         /// </summary>
@@ -401,6 +399,7 @@ namespace UnityHFSM
 
             return false;
         }
+        
         /// <summary>
         /// 尝试所有“全局”状态转移（即可以从任意状态触发的转移）。
         /// </summary>
@@ -502,7 +501,101 @@ namespace UnityHFSM
             if(activeState.needsExitTime)
                 activeState.OnExitRequest();
         }
+        
+        /// <summary>
+        /// 激活指定的触发器（trigger），
+        /// 检查所有与该触发器相关的触发器转换（trigger transitions），
+        /// 判断是否应该执行状态转换。
+        /// </summary>
+        /// <param name="eventName">触发器的名称 / 标识符。</param>
+        /// <returns>如果发生了状态转换则返回 true，否则返回 false。</returns>
+        public bool TryTrigger(TEventNameType eventName)
+        {
+            EnsureIsInitializedFor("Checking all trigger transitions of the active state");
+            
+            List<TransitionBase<TStateId>> triggerTransitions;
 
+            if (triggerTransitionsFromAny.TryGetValue(eventName, out triggerTransitions))
+            {
+                for (int i = 0, count = triggerTransitions.Count; i < count; i++)
+                {
+                    TransitionBase<TStateId> transition = triggerTransitions[i];
+                    if(EqualityComparer<TStateId>.Default.Equals(transition.to,activeState.name))
+                        continue;
+                    
+                    if(TryTransition(transition))
+                        return true;
+                }
+            }
+            
+            if(activeTriggerTransitions.TryGetValue(eventName, out triggerTransitions))
+            {
+                for (int i = 0, count = triggerTransitions.Count; i < count; i++)
+                {
+                    TransitionBase<TStateId> transition = triggerTransitions[i];
+
+                    if (TryTransition(transition))
+                        return true;
+                }   
+            }
+            
+            return false;
+        }
+
+        
+        /// <summary>
+        /// 在整个分层状态机中激活指定的触发器（trigger），
+        /// 会从当前状态机开始，依次检查所有活跃状态中相关的触发器转换，
+        /// 以判断是否应当发生状态转换。
+        /// </summary>
+        /// <param name="eventName">触发器的名称或标识符。</param>
+        public void Trigger(TEventNameType eventName)
+        {
+            // 如果当前状态机已经根据该 trigger 执行了一次转换，
+            // 就不再继续向更深层次的子状态机传播此 trigger。
+            if(TryTrigger(eventName)) return;
+            
+            // 如果当前激活状态本身是一个状态机（支持 ITriggerable 接口），则向其继续传递触发器
+            (activeState as ITriggerable<TEventNameType>)?.Trigger(eventName);
+        }
+
+        /// <summary>
+        /// 仅在当前状态机内部激活指定的触发器，不会传播给子状态机。
+        /// </summary>
+        /// <param name="eventName">触发器的名称或标识符。</param>
+        public void TryTriggerLocally(TEventNameType eventName)
+        {
+            TryTrigger(eventName);
+        }
+        
+        /// <summary>
+        /// 在当前活跃状态上执行一个无参动作。
+        /// </summary>
+        /// <param name="eventName">动作的名称。</param>
+        public void OnAction(TEventNameType eventName)
+        {
+            EnsureIsInitializedFor("运行当前状态的 OnAction 动作");
+            (activeState as IActionable<TEventNameType>)?.OnAction(eventName);
+        }
+
+        /// <summary>
+        /// 在当前活跃状态上执行一个带参数的动作。
+        /// </summary>
+        /// <param name="eventName">动作的名称。</param>
+        /// <param name="data">附带的数据参数。</param>
+        /// <typeparam name="TData">
+        /// 数据参数的类型。必须与通过 <c>AddAction&lt;T&gt;(...)</c> 添加动作时的数据类型一致。
+        /// </typeparam>
+        public void OnAction<TData>(TEventNameType eventName, TData data)
+        {
+            EnsureIsInitializedFor("运行当前状态的带参 OnAction 动作");
+            (activeState as IActionable<TEventNameType>)?.OnAction<TData>(eventName, data);
+        }
+        
+        // 上方为状态机自身逻辑方法
+        // <--------------------------- 分界线 --------------------------->
+        // 下方为状态机字段管理方法
+        
         /// <summary>
         /// 定义状态机的起始状态（首次进入状态机时将进入该状态）。
         /// </summary>
@@ -735,102 +828,6 @@ namespace UnityHFSM
         }
         
         
-
-        /// <summary>
-        /// 激活指定的触发器（trigger），
-        /// 检查所有与该触发器相关的触发器转换（trigger transitions），
-        /// 判断是否应该执行状态转换。
-        /// </summary>
-        /// <param name="eventName">触发器的名称 / 标识符。</param>
-        /// <returns>如果发生了状态转换则返回 true，否则返回 false。</returns>
-        public bool TryTrigger(TEventNameType eventName)
-        {
-            EnsureIsInitializedFor("Checking all trigger transitions of the active state");
-            
-            List<TransitionBase<TStateId>> triggerTransitions;
-
-            if (triggerTransitionsFromAny.TryGetValue(eventName, out triggerTransitions))
-            {
-                for (int i = 0, count = triggerTransitions.Count; i < count; i++)
-                {
-                    TransitionBase<TStateId> transition = triggerTransitions[i];
-                    if(EqualityComparer<TStateId>.Default.Equals(transition.to,activeState.name))
-                        continue;
-                    
-                    if(TryTransition(transition))
-                        return true;
-                }
-            }
-            
-            if(activeTriggerTransitions.TryGetValue(eventName, out triggerTransitions))
-            {
-                for (int i = 0, count = triggerTransitions.Count; i < count; i++)
-                {
-                    TransitionBase<TStateId> transition = triggerTransitions[i];
-
-                    if (TryTransition(transition))
-                        return true;
-                }   
-            }
-            
-            return false;
-        }
-
-        
-        /// <summary>
-        /// 在整个分层状态机中激活指定的触发器（trigger），
-        /// 会从当前状态机开始，依次检查所有活跃状态中相关的触发器转换，
-        /// 以判断是否应当发生状态转换。
-        /// </summary>
-        /// <param name="eventName">触发器的名称或标识符。</param>
-        public void Trigger(TEventNameType eventName)
-        {
-            // 如果当前状态机已经根据该 trigger 执行了一次转换，
-            // 就不再继续向更深层次的子状态机传播此 trigger。
-            if(TryTrigger(eventName)) return;
-            
-            // 如果当前激活状态本身是一个状态机（支持 ITriggerable 接口），则向其继续传递触发器
-            (activeState as ITriggerable<TEventNameType>)?.Trigger(eventName);
-        }
-
-        /// <summary>
-        /// 仅在当前状态机内部激活指定的触发器，不会传播给子状态机。
-        /// </summary>
-        /// <param name="eventName">触发器的名称或标识符。</param>
-        public void TryTriggerLocally(TEventNameType eventName)
-        {
-            TryTrigger(eventName);
-        }
-        
-        
-        
-
-        /// <summary>
-        /// 在当前活跃状态上执行一个无参动作。
-        /// </summary>
-        /// <param name="eventName">动作的名称。</param>
-        public void OnAction(TEventNameType eventName)
-        {
-            EnsureIsInitializedFor("运行当前状态的 OnAction 动作");
-            (activeState as IActionable<TEventNameType>)?.OnAction(eventName);
-        }
-
-        /// <summary>
-        /// 在当前活跃状态上执行一个带参数的动作。
-        /// </summary>
-        /// <param name="eventName">动作的名称。</param>
-        /// <param name="data">附带的数据参数。</param>
-        /// <typeparam name="TData">
-        /// 数据参数的类型。必须与通过 <c>AddAction&lt;T&gt;(...)</c> 添加动作时的数据类型一致。
-        /// </typeparam>
-        public void OnAction<TData>(TEventNameType eventName, TData data)
-        {
-            EnsureIsInitializedFor("运行当前状态的带参 OnAction 动作");
-            (activeState as IActionable<TEventNameType>)?.OnAction<TData>(eventName, data);
-        }
-        
-        
-
         public StateBase<TStateId> GetState(TStateId stateName)
         {
             StateBundle stateBundle;
