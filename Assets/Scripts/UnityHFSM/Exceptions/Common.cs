@@ -32,7 +32,7 @@
             );
         }
 
-        public static StateMachineException MissingStarState<TStateId>(
+        public static StateMachineException MissingStartState<TStateId>(
             StateBase<TStateId> fsm,
             string context = null,
             string problem = null,

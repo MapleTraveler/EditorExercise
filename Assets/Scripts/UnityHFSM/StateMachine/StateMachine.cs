@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using UnityEngine;
 
@@ -434,7 +435,7 @@ namespace UnityHFSM
         {
             if (!startState.hasState)
             {
-                throw UnityHFSM.Exceptions.Common.MissingStarState(this, context: "运行状态机的 OnEnter 时");
+                throw UnityHFSM.Exceptions.Common.MissingStartState(this, context: "运行状态机的 OnEnter 时");
             }
             // 清除上一次运行中可能遗留下的待定转换
             pendingTransition.Clear();
@@ -830,10 +831,10 @@ namespace UnityHFSM
         
         
 
-        public StateBase<TStateId> GetState(TStateId name)
+        public StateBase<TStateId> GetState(TStateId stateName)
         {
             StateBundle stateBundle;
-            if (!stateBundlesByName.TryGetValue(name, out stateBundle) || stateBundle == null)
+            if (!stateBundlesByName.TryGetValue(stateName, out stateBundle) || stateBundle == null)
             {
                 throw UnityHFSM.Exceptions.Common.StateNotFound(this, name.ToString(), context: "Getting a state");
             }
@@ -861,8 +862,147 @@ namespace UnityHFSM
                 return subFsm;
             }
         }
+
+        public override string GetActiveHierarchyPath()
+        {
+            if (activeState == null)
+            {
+                // 当状态机当前没有激活状态时，层级路径为空字符串。
+                return "";
+            }
+            
+            return $"{name}/{activeState.GetActiveHierarchyPath()}";
+        }
+
+        /// <summary>返回当前状态机中所有已定义状态的名称列表。</summary>
+        /// <remarks>注意：该操作代价较高（需要遍历整个状态字典）。</remarks>
+        public IReadOnlyList<TStateId> GetAllStateNames()
+        {
+            return stateBundlesByName.Values
+                .Where(bundle => bundle.state != null)
+                .Select(bundle => bundle.state.name)
+                .ToArray();
+        }
+        
+        /// <summary>返回当前状态机中所有已定义的状态对象。</summary>
+        /// <remarks>注意：该操作代价较高（需要遍历整个状态字典）。</remarks>
+        public IReadOnlyList<StateBase<TStateId>> GetAllStates()
+        {
+            return stateBundlesByName.Values
+                .Where(bundle => bundle.state != null)
+                .Select(bundle => bundle.state)
+                .ToArray();
+        }
+
+        public TStateId GetStartName()
+        {
+            if (!startState.hasState)
+            {
+                throw UnityHFSM.Exceptions.Common.MissingStartState(
+                    this,
+                    context: "Getting the start state",
+                    solution: "确保调用 fsm.AddState(...) 之后再使用 GetStartStateName()。");
+            }
+            return startState.state;
+        }
+
+        /// <summary>返回所有“普通状态转移”的集合。</summary>
+        /// <remarks>注意：该操作代价较高。</remarks>
+        public IReadOnlyList<TransitionBase<TStateId>> GetAllTransitions()
+        {
+            return stateBundlesByName.Values
+                .Where(bundle => bundle.transitions != null)
+                .SelectMany(bundle => bundle.transitions)
+                .ToArray();
+        }
+
+        public IReadOnlyList<TransitionBase<TStateId>> GetAllTransitionsFromAny()
+        {
+            return transitionsFromAny.ToArray();// ToArray也是一种拷贝
+        }
+
+        /// <summary>返回所有已添加的触发器转换，并按触发事件分组。</summary>
+        /// <remarks>注意：这是一个开销较大的操作。</remarks>
+        public IReadOnlyDictionary<TEventNameType, IReadOnlyList<TransitionBase<TStateId>>> GetAllTriggerTransitions()
+        {
+            var transitionsByEventName = new Dictionary<TEventNameType, List<TransitionBase<TStateId>>>();
+
+            foreach (var bundle in stateBundlesByName.Values)
+            {
+                if(bundle.triggerToTransitions == null)
+                    continue;
+
+                foreach ((TEventNameType trigger, List<TransitionBase<TStateId>> transitions) in bundle.triggerToTransitions)
+                {
+                    if (!transitionsByEventName.TryGetValue(trigger,
+                            out List<TransitionBase<TStateId>> transitionsForEvent))
+                    {
+                        transitionsForEvent = new List<TransitionBase<TStateId>>();
+                        transitionsByEventName.Add(trigger, transitionsForEvent);
+                    }
+                    
+                    transitionsForEvent.AddRange(transitions);
+                }
+            }
+
+            var immutableCopy = new Dictionary<TEventNameType, IReadOnlyList<TransitionBase<TStateId>>>();
+            foreach ((TEventNameType trigger, List<TransitionBase<TStateId>> transitions) in transitionsByEventName)
+            {
+                immutableCopy.Add(trigger,transitions);
+            }
+            return immutableCopy;
+        }
+        
+        /// <summary>返回所有“全局触发器转换”（即从任意状态出发），并按触发事件分组。</summary>
+        /// <remarks>注意：这是一个开销较大的操作。</remarks>
+        public IReadOnlyDictionary<TEventNameType, IReadOnlyList<TransitionBase<TStateId>>> GetAllTriggerTransitionsFromAny()
+        {
+            var immutableCopy = new Dictionary<TEventNameType, IReadOnlyList<TransitionBase<TStateId>>>();
+            foreach ((TEventNameType trigger, List<TransitionBase<TStateId>> transitions) in triggerTransitionsFromAny)
+            {
+                immutableCopy.Add(trigger, transitions);
+            }
+            return immutableCopy;
+        }
+        
+        
+        //TODO:缺少可视化部分的代码
         
         
         
+        
+        
+    }
+    
+    // 重载的 StateMachine 类，以简化通用情况的使用方式。
+    // 例如：你可以写 new StateMachine()，而不用写 new StateMachine<string, string, string>()
+    
+    /// <inheritdoc />
+    public class StateMachine<TStateId, TEventNameType> : StateMachine<TStateId, TStateId, TEventNameType>
+    {
+        /// <inheritdoc />
+        public StateMachine(bool needsExitTime = false, bool isGhostState = false, bool rememberLastState = false)
+            : base(needsExitTime: needsExitTime, isGhostState: isGhostState, rememberLastState: rememberLastState)
+        {
+        }
+    }
+
+    /// <inheritdoc />
+    public class StateMachine<TStateId> : StateMachine<TStateId, TStateId, string>
+    {
+        public StateMachine(bool needsExitTime = false, bool isGhostState = false, bool rememberLastState = false)
+            : base(needsExitTime: needsExitTime, isGhostState: isGhostState, rememberLastState: rememberLastState)
+        {
+        }
+    }
+
+    /// <inheritdoc />
+    public class StateMachine : StateMachine<string, string, string>
+    {
+        /// <inheritdoc />
+        public StateMachine(bool needsExitTime = false, bool isGhostState = false, bool rememberLastState = false)
+            : base(needsExitTime: needsExitTime, isGhostState: isGhostState, rememberLastState: rememberLastState)
+        {
+        }
     }
 }
